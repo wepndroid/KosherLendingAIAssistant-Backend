@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
   category TEXT NOT NULL,
   file_type TEXT,
   file_size_bytes BIGINT,
+  file_sha256 TEXT,
   storage_path TEXT,
   status TEXT DEFAULT 'Uploaded',
   total_chunks INTEGER DEFAULT 0,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
   uploaded_at TIMESTAMPTZ DEFAULT NOW(),
   indexed_at TIMESTAMPTZ
 );
+CREATE INDEX IF NOT EXISTS idx_docs_sha256 ON knowledge_documents(file_sha256);
 
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

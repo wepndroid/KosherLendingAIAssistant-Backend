@@ -37,6 +37,7 @@ class BatchRequest(BaseModel):
     videos_per_day: int = 12
     start_date: str | None = None  # YYYY-MM-DD
     pillars: list[str] | None = None
+    platforms: list[str] | None = None
     duration: str = "45 seconds"
 
 
@@ -155,6 +156,18 @@ async def _run(job_id: str, req: BatchRequest):
         pillars = ["Psychology & Behavioral Economics"]
 
     start = date.fromisoformat(req.start_date) if req.start_date else date.today()
+    platforms = [p.strip() for p in (req.platforms or []) if str(p).strip()]
+    if not platforms:
+        # Default to 7 distribution targets for high-volume cross-platform cadence.
+        platforms = [
+            "TikTok",
+            "Instagram Reels",
+            "YouTube Shorts",
+            "Facebook Reels",
+            "LinkedIn",
+            "X/Twitter",
+            "Threads",
+        ]
     completed = 0
     errors = 0
     recent_results: list[dict] = []
@@ -170,7 +183,7 @@ async def _run(job_id: str, req: BatchRequest):
             day = start + timedelta(days=d)
             for slot in range(req.videos_per_day):
                 pillar = pillars[(d + slot) % len(pillars)]
-                platform = ["TikTok", "Instagram Reels", "YouTube Shorts", "Facebook Reels", "LinkedIn", "X/Twitter"][slot % 6]
+                platform = platforms[slot % len(platforms)]
                 topic = f"{pillar} insight for {day.isoformat()} slot {slot+1}"
                 try:
                     res = await generator.generate_one(

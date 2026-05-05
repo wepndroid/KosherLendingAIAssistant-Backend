@@ -49,8 +49,8 @@ async def generate(req: GenerateRequest, _user=Depends(optional_user)):
         raise HTTPException(
             status_code=409,
             detail={
-                "code": "duplicate_angle_blocked",
-                "message": "All variations were too similar to recent posts. Try a different angle, framework, or pillar.",
+                "code": "duplicate_blocked",
+                "message": "All variations were blocked by duplicate prevention. Try a different angle, framework, source book, or pillar.",
                 "blocked": blocked,
             },
         )
