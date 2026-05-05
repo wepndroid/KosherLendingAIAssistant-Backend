@@ -12,6 +12,7 @@ from db.supabase_client import supabase
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
 _pw = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 class Credentials(BaseModel):
@@ -23,6 +24,15 @@ class Credentials(BaseModel):
 class TokenOut(BaseModel):
     token: str
     user: dict
+
+
+def _ensure_bcrypt_password_limit(password: str) -> None:
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > _BCRYPT_MAX_PASSWORD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password is too long. Maximum is {_BCRYPT_MAX_PASSWORD_BYTES} bytes.",
+        )
 
 
 def _make_token(user: dict) -> str:
@@ -38,6 +48,7 @@ def _make_token(user: dict) -> str:
 
 @router.post("/register", response_model=TokenOut)
 def register(body: Credentials):
+    _ensure_bcrypt_password_limit(body.password)
     db = supabase()
     existing = db.table("users").select("id").eq("email", body.email).limit(1).execute().data
     if existing:
@@ -56,7 +67,14 @@ def register(body: Credentials):
 def login(body: Credentials):
     db = supabase()
     rows = db.table("users").select("*").eq("email", body.email).limit(1).execute().data
-    if not rows or not _pw.verify(body.password, rows[0]["password_hash"]):
+    _ensure_bcrypt_password_limit(body.password)
+    if not rows:
+        raise HTTPException(401, "Invalid credentials")
+    try:
+        valid = _pw.verify(body.password, rows[0]["password_hash"])
+    except ValueError:
+        valid = False
+    if not valid:
         raise HTTPException(401, "Invalid credentials")
     user = rows[0]
     db.table("users").update({"last_login": "now()"}).eq("id", user["id"]).execute()
