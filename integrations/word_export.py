@@ -45,7 +45,9 @@ def render_content_pack(items: Iterable[dict], title: str, compliance_footer: st
                 p.add_run(f"{label}: ").bold = True
                 p.add_run(v)
 
-        _section(doc, "CTA", item.get("cta"))
+        cta_strategy = ((item.get("validations") or {}).get("cta_strategy") if isinstance(item.get("validations"), dict) else None)
+        _section(doc, "CTA strategy", cta_strategy)
+        _section(doc, "Spoken CTA", item.get("cta"))
         _section(doc, "DM keyword → deliverable", f"{item.get('dm_keyword','-')} → {item.get('deliverable','-')}")
 
         tags = item.get("hashtags") or []

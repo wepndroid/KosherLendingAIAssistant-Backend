@@ -65,13 +65,43 @@ def _cors_headers(req: Request) -> dict[str, str]:
     return {}
 
 
+_INTEGRATION_KEYS = ("SUPABASE", "ANTHROPIC", "OPENAI", "GHL", "PERPLEXITY")
+_INTEGRATION_HINTS = (
+    "invalid api key",
+    "incorrect api key",
+    "401 unauthorized",
+    "403 forbidden",
+    "could not resolve host",
+    "name or service not known",
+    "nodename nor servname provided",
+    "supabaseexception",
+    "your-project.supabase.co",
+)
+
+
+def _is_integration_failure(root: BaseException) -> bool:
+    msg = str(root).lower()
+    if isinstance(root, RuntimeError) and any(k in str(root) for k in _INTEGRATION_KEYS):
+        return True
+    cls = type(root).__name__.lower()
+    if any(h in msg for h in _INTEGRATION_HINTS):
+        return True
+    if "supabase" in cls or "openai" in cls or "anthropic" in cls:
+        return True
+    return False
+
+
 @app.exception_handler(Exception)
 async def integration_error_handler(req: Request, exc: Exception):
     root = _unwrap(exc)
     msg = str(root)
     headers = _cors_headers(req)
-    if isinstance(root, RuntimeError) and any(k in msg for k in ("SUPABASE", "ANTHROPIC", "OPENAI", "GHL")):
-        return JSONResponse(status_code=503, content={"detail": msg, "code": "integration_not_configured"}, headers=headers)
+    if _is_integration_failure(root):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": msg, "code": "integration_not_configured"},
+            headers=headers,
+        )
     return JSONResponse(status_code=500, content={"detail": f"{type(root).__name__}: {msg}"}, headers=headers)
 
 

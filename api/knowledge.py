@@ -1,10 +1,18 @@
+import os
+import shutil
+import tempfile
+from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 
 from core import ingestion, cross_analysis, synthesis
 from db.supabase_client import supabase
+from config import get_settings
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+
+# 8 MB read window — stays well under any worker's memory budget for any file size
+_UPLOAD_CHUNK = 8 * 1024 * 1024
 
 
 @router.get("/log")
@@ -49,28 +57,82 @@ async def upload(
     pillars: str = Form(""),
     _user=Depends(optional_user),
 ):
-    data = await file.read()
+    """Streaming upload: never loads the whole file into RAM.
+
+    The bytes go to a local temp file in 8 MB chunks. The background task
+    runs the streaming ingestion against that temp file, then uploads the
+    raw file to Supabase Storage as a backup, and finally deletes the temp.
+    """
     pillar_list = [p.strip() for p in pillars.split(",") if p.strip()]
+    suffix = Path(file.filename or "").suffix.lower()
+
+    # Stream to a local temp file
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    total_bytes = 0
+    try:
+        with os.fdopen(fd, "wb") as out:
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                out.write(chunk)
+                total_bytes += len(chunk)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        raise
+
     row = {
         "name": file.filename,
         "category": category,
         "file_type": (file.filename or "").split(".")[-1].upper(),
-        "file_size_bytes": len(data),
+        "file_size_bytes": total_bytes,
         "status": "Uploaded",
         "pillars": pillar_list,
     }
     inserted = supabase().table("knowledge_documents").insert(row).execute().data[0]
 
-    bg.add_task(_run_ingest, inserted["id"], file.filename, data)
+    bg.add_task(_run_ingest_streaming, inserted["id"], file.filename, tmp_path)
     return inserted
 
 
-def _run_ingest(doc_id: str, filename: str, data: bytes):
+def _run_ingest_streaming(doc_id: str, filename: str, tmp_path: str):
+    """Streaming ingestion: opens the local temp file once, parses page-by-page,
+    embeds in batches. Memory stays bounded regardless of file size."""
     try:
-        ingestion.ingest_document(document_id=doc_id, filename=filename, data=data)
+        with open(tmp_path, "rb") as f:
+            ingestion.ingest_streaming(document_id=doc_id, filename=filename, file_obj=f)
         cross_analysis.run(doc_id)
+        _upload_to_storage(doc_id, filename, tmp_path)
     except Exception as e:
-        supabase().table("knowledge_documents").update({"status": "Failed", "summary": f"Error: {e}"}).eq("id", doc_id).execute()
+        supabase().table("knowledge_documents").update(
+            {"status": "Failed", "summary": f"Error: {e}"}
+        ).eq("id", doc_id).execute()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+def _upload_to_storage(doc_id: str, filename: str, local_path: str) -> None:
+    """Best-effort: copy the source file into Supabase Storage so it's preserved off the worker."""
+    s = get_settings()
+    bucket = s.SUPABASE_STORAGE_BUCKET
+    if not bucket:
+        return
+    storage_path = f"docs/{doc_id}/{filename}"
+    try:
+        client = supabase().storage.from_(bucket)
+        # supabase-py's upload reads from disk path or bytes; using the path keeps it streaming-friendly
+        with open(local_path, "rb") as f:
+            client.upload(path=storage_path, file=f, file_options={"upsert": "true"})
+        supabase().table("knowledge_documents").update({"storage_path": storage_path}).eq("id", doc_id).execute()
+    except Exception:
+        # Non-fatal: ingestion already succeeded, the file just isn't archived
+        pass
 
 
 @router.delete("/{doc_id}")

@@ -14,7 +14,9 @@ A new document was just added. Compare it against the existing summaries below a
 {
   "overlap": [<sentences describing concepts already covered>],
   "complementary": [<frameworks that pair WELL with existing books for synthesis>],
+  "contradictions": [<claims that appear to disagree with existing library viewpoints>],
   "net_new": [<truly new material>],
+  "suggested_combinations": [<book/framework pairings worth testing in new posts>],
   "suggested_synthesis_angles": [<3-5 short content angle ideas combining new + existing>]
 }
 
@@ -46,7 +48,14 @@ def run(new_document_id: str) -> dict:
         or []
     )
     if not others:
-        return {"overlap": [], "complementary": [], "net_new": [], "suggested_synthesis_angles": []}
+        return {
+            "overlap": [],
+            "complementary": [],
+            "contradictions": [],
+            "net_new": [],
+            "suggested_combinations": [],
+            "suggested_synthesis_angles": [],
+        }
 
     existing_block = "\n\n".join(f"- {d['name']}: {d.get('summary') or '(no summary)'}" for d in others)
     s = get_settings()
@@ -67,5 +76,22 @@ def run(new_document_id: str) -> dict:
         result = json.loads(m.group(0) if m else raw)
     except Exception:
         result = {"raw": raw}
+    result = _normalize_shape(result)
     db.table("knowledge_documents").update({"cross_analysis": result}).eq("id", new_document_id).execute()
     return result
+
+
+def _normalize_shape(result: dict) -> dict:
+    normalized = dict(result or {})
+    for k in (
+        "overlap",
+        "complementary",
+        "contradictions",
+        "net_new",
+        "suggested_combinations",
+        "suggested_synthesis_angles",
+    ):
+        v = normalized.get(k)
+        if not isinstance(v, list):
+            normalized[k] = []
+    return normalized

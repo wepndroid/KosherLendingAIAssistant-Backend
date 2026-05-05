@@ -80,6 +80,7 @@ def build_user_request(
     parts.append("")
     parts.append(
         "Produce one complete content package as a single JSON object matching the schema. "
-        "Cite specifically from the retrieved passages above. Output JSON only."
+        "Cite specifically from the retrieved passages above. Include platform_targets as a recommended subset "
+        "and include spoken_cta as exact end-of-script words. Output JSON only."
     )
     return "\n".join(parts)

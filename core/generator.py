@@ -22,6 +22,20 @@ _PILLAR_KEYS = {
 }
 
 
+class DuplicateAngleError(Exception):
+    """Raised when a generated angle is too similar to a recent post — caller should retry."""
+    def __init__(self, conflicts: list[dict]):
+        self.conflicts = conflicts
+        super().__init__(f"Angle too similar to recent post(s): {[c.get('id') for c in conflicts]}")
+
+
+class DuplicateComboError(Exception):
+    """Raised when source_book + source_framework combo was recently used."""
+    def __init__(self, conflicts: list[dict]):
+        self.conflicts = conflicts
+        super().__init__("Book/framework combination was recently used")
+
+
 async def generate_one(
     *,
     pillar: str,
@@ -33,6 +47,7 @@ async def generate_one(
     dm_keyword: str | None = None,
     source_books: list[str] | None = None,
     use_perplexity: bool = False,
+    block_on_duplicate: bool = True,
 ) -> dict[str, Any]:
     brand = brand_context.load()
 
@@ -79,8 +94,41 @@ async def generate_one(
         raw["platform"] = platform
     if not raw.get("duration"):
         raw["duration"] = duration
+    if raw.get("cta") and raw.get("spoken_cta"):
+        raw["cta_strategy"] = raw["cta"]
+        raw["cta"] = raw["spoken_cta"]
+    elif raw.get("spoken_cta") and not raw.get("cta"):
+        raw["cta"] = raw["spoken_cta"]
+    elif raw.get("cta") and not raw.get("spoken_cta"):
+        raw["spoken_cta"] = raw["cta"]
+    if not isinstance(raw.get("platform_targets"), list) or not raw.get("platform_targets"):
+        raw["platform_targets"] = [platform]
+    else:
+        seen: set[str] = set()
+        normalized_targets: list[str] = []
+        for tgt in raw.get("platform_targets", []):
+            t = str(tgt).strip()
+            if t and t not in seen:
+                seen.add(t)
+                normalized_targets.append(t)
+        raw["platform_targets"] = normalized_targets or [platform]
 
-    raw["duplicate_risk"] = duplicate_check.assess_risk(raw, avoidance)
+    # Idea-level dedup: embed (topic + hook + perspective_shift + framework) and check
+    # against recent posts. Tier may BLOCK and force regeneration.
+    angle_emb = duplicate_check.embed_angle(raw)
+    raw["angle_embedding"] = angle_emb
+    angle_check = duplicate_check.assess_angle_similarity(angle_emb)
+
+    if angle_check["should_block"] and block_on_duplicate:
+        raise DuplicateAngleError(angle_check["conflicts"])
+
+    combo_check = duplicate_check.assess_combo_reuse(raw, pillar=pillar)
+    if combo_check["should_block"] and block_on_duplicate:
+        raise DuplicateComboError(combo_check["conflicts"])
+
+    # Combine string-level and angle-level signals; angle takes precedence when stronger
+    string_tier = duplicate_check.assess_risk(raw, avoidance)
+    raw["duplicate_risk"] = _max_tier(string_tier, angle_check["tier"], combo_check["tier"])
 
     val = compliance.validate(
         raw,
@@ -88,14 +136,28 @@ async def generate_one(
         compliance_footer=brand.get("compliance_footer", ""),
     )
     content = val["content"]
-    content["validations"] = {"status": val["status"], "errors": val["errors"], "warnings": val["warnings"]}
+    all_conflicts = (angle_check.get("conflicts") or []) + (combo_check.get("conflicts") or [])
+    content["validations"] = {
+        "status": val["status"],
+        "errors": val["errors"],
+        "warnings": val["warnings"],
+        "conflicts": all_conflicts,
+        "duplicate_checks": {
+            "angle": angle_check,
+            "combo": combo_check,
+            "string": string_tier,
+        },
+        "cta_strategy": raw.get("cta_strategy"),
+    }
 
-    if val["errors"]:
+    if val["errors"] or angle_check["tier"] in {"High", "Block"} or combo_check["tier"] in {"High", "Block"}:
         content["status"] = "Needs Review"
     else:
         content["status"] = "Draft"
 
     saved = _persist(content)
+    saved["spoken_cta"] = content.get("spoken_cta") or saved.get("cta")
+    saved["cta_strategy"] = (content.get("validations") or {}).get("cta_strategy")
     duplicate_check.log(content_id=saved["id"], content=saved)
 
     supabase().table("activity_log").insert(
@@ -103,6 +165,13 @@ async def generate_one(
     ).execute()
 
     return saved
+
+
+_TIER_ORDER = {"Low": 0, "Medium": 1, "High": 2, "Block": 3}
+
+
+def _max_tier(*tiers: str) -> str:
+    return max(tiers, key=lambda t: _TIER_ORDER.get(t, 0))
 
 
 def _persist(content: dict) -> dict:
@@ -133,6 +202,9 @@ def _persist(content: dict) -> dict:
         "source_framework": content.get("source_framework"),
         "source_reason": content.get("source_reason"),
         "source_chunks": content.get("source_chunks") or [],
+        "experience_named": content.get("experience_named"),
+        "perspective_shift": content.get("perspective_shift"),
+        "angle_embedding": content.get("angle_embedding"),
         "duplicate_risk": content.get("duplicate_risk", "Low"),
         "validations": content.get("validations"),
     }

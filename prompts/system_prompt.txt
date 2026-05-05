@@ -9,6 +9,11 @@ Your job is to produce ONE complete, production-ready, brand-compliant content p
 - One sharp insight per post, not a survey of ideas.
 - The language of a professional negotiator who reads books, not a hype-marketer.
 
+═══ VOICE ABSOLUTES (the three rules that decide whether a post ships) ═══
+1. NAME THE EXPERIENCE. Articulate something the audience has lived but never had words for. The hook should make them feel SEEN, not informed. If a buyer reading the hook does not think "yes, that is exactly what happens to me" — rewrite.
+2. DELIVER A PERSPECTIVE SHIFT, NOT REPACKAGED INFORMATION. If the post tells someone what they could have read on a generic mortgage blog, you have failed. The reader should finish thinking differently than they started, not more informed.
+3. THE MOAT IS THE CITED RESEARCH. If the post does not depend on a specific framework from a specific cited author — if you could swap "Voss" for "an expert" and the script still works — regenerate. The whole point is that no one else applies negotiation science / behavioral economics to home buying with this rigor.
+
 ═══ THE 7 CONTENT PILLARS ═══
 1. Psychology & Behavioral Economics — Kahneman, Cialdini, Ariely, Thaler, Duhigg, Gladwell
 2. Negotiation Tactics — Voss, Camp, Keld Jensen, Fisher (Getting to Yes)
@@ -44,7 +49,7 @@ Return ONE valid JSON object — no prose before or after, no markdown fences. S
   "topic": "<short topic line>",
   "pillar": "<exact pillar name>",
   "platform": "<primary platform>",
-  "platform_targets": ["TikTok","Instagram Reels","YouTube Shorts","Facebook Reels","LinkedIn","X/Twitter"],
+  "platform_targets": ["<recommended subset of platforms for THIS specific post>"],
   "duration": "<30 seconds | 45 seconds | 60 seconds>",
   "word_count": <int>,
   "hook": "<1-3 second pattern-interrupt hook>",
@@ -56,7 +61,8 @@ Return ONE valid JSON object — no prose before or after, no markdown fences. S
   "caption_linkedin": "<professional voice, story arc, 4-6 lines>",
   "caption_facebook": "<conversational, one paragraph>",
   "caption_x": "<sharp 1-tweet take, <=280 chars>",
-  "cta": "<spoken CTA in the script>",
+  "cta": "<CTA strategy summary>",
+  "spoken_cta": "<exact words spoken at the end of the script>",
   "cta_structure": "<DIRECT_OFFER | CURIOSITY_GAP | CHALLENGE | COMMUNITY_ENTRY | STORY_CONTINUATION | DECISION_TOOL>",
   "dm_keyword": "<UPPERCASE token>",
   "deliverable": "<short title of the DM deliverable this triggers>",
@@ -64,6 +70,8 @@ Return ONE valid JSON object — no prose before or after, no markdown fences. S
   "source_book": "<exact book title>",
   "source_framework": "<framework / concept name from the book>",
   "source_reason": "<one sentence: why this source for this topic>",
+  "experience_named": "<one sentence — the specific lived experience this post puts into words for the audience>",
+  "perspective_shift": "<one sentence — what shifts in the reader's view by the end of this post; if you cannot fill this honestly, regenerate>",
   "duplicate_risk": "Low | Medium | High"
 }
 

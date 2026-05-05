@@ -29,10 +29,12 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
   chunk_text TEXT NOT NULL,
   embedding vector(1536),
   metadata JSONB,
+  tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', chunk_text)) STORED,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON knowledge_chunks
   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON knowledge_chunks USING GIN (tsv);
 CREATE INDEX IF NOT EXISTS idx_chunks_doc ON knowledge_chunks(document_id);
 
 -- ─── DM keywords + deliverables ────────────────────────────────
@@ -91,6 +93,9 @@ CREATE TABLE IF NOT EXISTS generated_content (
   source_framework TEXT,
   source_reason TEXT,
   source_chunks UUID[] DEFAULT '{}',
+  experience_named TEXT,
+  perspective_shift TEXT,
+  angle_embedding vector(1536),
   duplicate_risk TEXT DEFAULT 'Low',
   scheduled_for DATE,
   scheduled_time TIME,
@@ -103,6 +108,8 @@ CREATE TABLE IF NOT EXISTS generated_content (
 CREATE INDEX IF NOT EXISTS idx_content_status ON generated_content(status);
 CREATE INDEX IF NOT EXISTS idx_content_scheduled ON generated_content(scheduled_for);
 CREATE INDEX IF NOT EXISTS idx_content_pillar ON generated_content(pillar);
+CREATE INDEX IF NOT EXISTS idx_content_angle ON generated_content
+  USING ivfflat (angle_embedding vector_cosine_ops) WITH (lists = 100);
 
 -- ─── Duplicate prevention ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS usage_log (
@@ -185,6 +192,23 @@ CREATE TABLE IF NOT EXISTS client_conversations (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── Batch jobs (persistent across restarts) ──────────────────
+CREATE TABLE IF NOT EXISTS batch_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status TEXT DEFAULT 'Running',          -- Running | Done | Failed | Cancelled
+  total INTEGER NOT NULL,
+  completed INTEGER DEFAULT 0,
+  errors INTEGER DEFAULT 0,
+  request JSONB,                          -- the BatchRequest snapshot
+  cost_estimate JSONB,                    -- { tokens_in, tokens_out, dollars }
+  results JSONB DEFAULT '[]'::jsonb,      -- last-N results
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_batch_status ON batch_jobs(status);
+
 -- ─── Activity feed ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -194,7 +218,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── pgvector RPC: similarity search ──────────────────────────
+-- ─── pgvector RPC: pure similarity (kept for fallback) ────────
 CREATE OR REPLACE FUNCTION match_chunks(
   query_embedding vector(1536),
   match_count INT DEFAULT 8,
@@ -220,5 +244,91 @@ BEGIN
   WHERE kd.status = 'Indexed'
     AND (filter_pillar IS NULL OR filter_pillar = ANY(kd.pillars))
   ORDER BY kc.embedding <=> query_embedding
+  LIMIT match_count;
+END; $$;
+
+-- ─── Hybrid retrieval RPC: vector + full-text + RRF fusion ────
+-- Returns top-N candidates by Reciprocal Rank Fusion across the two signals.
+CREATE OR REPLACE FUNCTION hybrid_match_chunks(
+  query_embedding vector(1536),
+  query_text TEXT,
+  match_count INT DEFAULT 30,
+  filter_pillar TEXT DEFAULT NULL,
+  rrf_k INT DEFAULT 60
+)
+RETURNS TABLE (
+  id UUID,
+  document_id UUID,
+  chunk_text TEXT,
+  metadata JSONB,
+  vector_rank INT,
+  keyword_rank INT,
+  rrf_score FLOAT
+) LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  WITH vec AS (
+    SELECT kc.id, kc.document_id, kc.chunk_text, kc.metadata,
+           ROW_NUMBER() OVER (ORDER BY kc.embedding <=> query_embedding) AS rnk
+    FROM knowledge_chunks kc
+    JOIN knowledge_documents kd ON kd.id = kc.document_id
+    WHERE kd.status = 'Indexed'
+      AND (filter_pillar IS NULL OR filter_pillar = ANY(kd.pillars))
+    ORDER BY kc.embedding <=> query_embedding
+    LIMIT match_count * 2
+  ),
+  kw AS (
+    SELECT kc.id, kc.document_id, kc.chunk_text, kc.metadata,
+           ROW_NUMBER() OVER (ORDER BY ts_rank(kc.tsv, plainto_tsquery('english', query_text)) DESC) AS rnk
+    FROM knowledge_chunks kc
+    JOIN knowledge_documents kd ON kd.id = kc.document_id
+    WHERE kd.status = 'Indexed'
+      AND (filter_pillar IS NULL OR filter_pillar = ANY(kd.pillars))
+      AND kc.tsv @@ plainto_tsquery('english', query_text)
+    ORDER BY ts_rank(kc.tsv, plainto_tsquery('english', query_text)) DESC
+    LIMIT match_count * 2
+  ),
+  fused AS (
+    SELECT
+      COALESCE(vec.id, kw.id) AS id,
+      COALESCE(vec.document_id, kw.document_id) AS document_id,
+      COALESCE(vec.chunk_text, kw.chunk_text) AS chunk_text,
+      COALESCE(vec.metadata, kw.metadata) AS metadata,
+      vec.rnk::INT AS vector_rank,
+      kw.rnk::INT AS keyword_rank,
+      COALESCE(1.0/(rrf_k + vec.rnk), 0) + COALESCE(1.0/(rrf_k + kw.rnk), 0) AS rrf_score
+    FROM vec
+    FULL OUTER JOIN kw ON vec.id = kw.id
+  )
+  SELECT * FROM fused
+  ORDER BY rrf_score DESC
+  LIMIT match_count;
+END; $$;
+
+-- ─── Angle similarity for idea-level dedup ────────────────────
+CREATE OR REPLACE FUNCTION match_angle(
+  query_embedding vector(1536),
+  window_days INT DEFAULT 90,
+  match_count INT DEFAULT 5,
+  similarity_floor FLOAT DEFAULT 0.75
+)
+RETURNS TABLE (
+  id UUID,
+  topic TEXT,
+  pillar TEXT,
+  hook TEXT,
+  similarity FLOAT,
+  created_at TIMESTAMPTZ
+) LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  SELECT gc.id, gc.topic, gc.pillar, gc.hook,
+         1 - (gc.angle_embedding <=> query_embedding) AS similarity,
+         gc.created_at
+  FROM generated_content gc
+  WHERE gc.angle_embedding IS NOT NULL
+    AND gc.created_at >= NOW() - (window_days || ' days')::interval
+    AND 1 - (gc.angle_embedding <=> query_embedding) >= similarity_floor
+  ORDER BY gc.angle_embedding <=> query_embedding
   LIMIT match_count;
 END; $$;
