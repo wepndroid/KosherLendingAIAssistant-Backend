@@ -6,8 +6,8 @@ from pydantic import BaseModel, EmailStr
 import jwt
 from passlib.context import CryptContext
 
-from ..config import get_settings
-from ..db.supabase_client import supabase
+from config import get_settings
+from db.supabase_client import supabase
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)

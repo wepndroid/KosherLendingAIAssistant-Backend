@@ -1,5 +1,5 @@
 import httpx
-from ..config import get_settings
+from config import get_settings
 
 
 async def research(query: str) -> str | None:

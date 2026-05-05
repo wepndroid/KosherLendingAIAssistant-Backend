@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..db.supabase_client import supabase
+from db.supabase_client import supabase
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/keywords", tags=["keywords"])

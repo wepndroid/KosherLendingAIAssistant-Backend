@@ -3,7 +3,7 @@ import re
 from typing import Any
 from anthropic import Anthropic
 from tenacity import retry, stop_after_attempt, wait_exponential
-from ..config import get_settings
+from config import get_settings
 
 _client: Anthropic | None = None
 

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from ..db.supabase_client import supabase
+from db.supabase_client import supabase
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])

@@ -5,9 +5,9 @@ import re
 from pathlib import Path
 from docx import Document as DocxDocument
 from pypdf import PdfReader
-from ..db.supabase_client import supabase
-from ..integrations.openai_client import embed
-from ..integrations.claude_client import summarize
+from db.supabase_client import supabase
+from integrations.openai_client import embed
+from integrations.claude_client import summarize
 
 
 CHUNK_SIZE = 800

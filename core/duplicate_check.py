@@ -1,5 +1,5 @@
 """Tracks which topic/book/framework combinations have been used to keep output fresh."""
-from ..db.supabase_client import supabase
+from db.supabase_client import supabase
 
 
 def recent_avoidance(*, pillar: str | None = None, limit: int = 50) -> list[dict]:

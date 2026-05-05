@@ -3,10 +3,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .config import get_settings
-from .core import brand_context
+from config import get_settings
+from core import brand_context
 
-from .api import auth, generate, knowledge, content, keywords, brand, dashboard, calendar, export, integrations, batch, webhooks
+from api import auth, generate, knowledge, content, keywords, brand, dashboard, calendar, export, integrations, batch, webhooks
 
 
 @asynccontextmanager

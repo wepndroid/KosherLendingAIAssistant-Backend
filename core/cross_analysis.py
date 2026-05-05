@@ -3,9 +3,9 @@
 Surfaces three categories: overlap (duplicate-prevention awareness), complementary frameworks
 (synthesis opportunities), and net-new material (fresh content).
 """
-from ..db.supabase_client import supabase
-from ..integrations.claude_client import client as claude_client
-from ..config import get_settings
+from db.supabase_client import supabase
+from integrations.claude_client import client as claude_client
+from config import get_settings
 
 
 PROMPT = """You are the librarian of a content knowledge base for a mortgage professional.

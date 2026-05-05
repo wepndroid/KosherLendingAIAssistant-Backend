@@ -4,9 +4,9 @@ import io
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..db.supabase_client import supabase
-from ..core import brand_context
-from ..integrations import word_export, google_docs
+from db.supabase_client import supabase
+from core import brand_context
+from integrations import word_export, google_docs
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/export", tags=["export"])

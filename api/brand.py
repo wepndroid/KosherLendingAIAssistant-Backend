@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..core import brand_context
+from core import brand_context
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/brand", tags=["brand"])

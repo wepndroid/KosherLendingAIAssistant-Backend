@@ -1,8 +1,8 @@
 """Loads and caches brand_config from Supabase. Falls back to env defaults."""
 from __future__ import annotations
 from typing import Any
-from ..config import get_settings
-from ..db.supabase_client import supabase
+from config import get_settings
+from db.supabase_client import supabase
 
 
 _DEFAULT_PILLARS = [

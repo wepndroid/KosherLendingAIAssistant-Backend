@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..core import generator, brand_context
+from core import generator, brand_context
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/batch", tags=["batch"])

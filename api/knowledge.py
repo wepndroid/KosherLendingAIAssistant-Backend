@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 
-from ..core import ingestion, cross_analysis, synthesis
-from ..db.supabase_client import supabase
+from core import ingestion, cross_analysis, synthesis
+from db.supabase_client import supabase
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from ..config import get_settings
+from config import get_settings
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])

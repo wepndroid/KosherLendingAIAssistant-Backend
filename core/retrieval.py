@@ -1,6 +1,6 @@
 """pgvector similarity retrieval for the generation pipeline."""
-from ..db.supabase_client import supabase
-from ..integrations.openai_client import embed_one
+from db.supabase_client import supabase
+from integrations.openai_client import embed_one
 
 
 def retrieve(query: str, *, pillar: str | None = None, k: int = 8) -> list[dict]:

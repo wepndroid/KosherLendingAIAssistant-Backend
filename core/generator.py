@@ -1,10 +1,10 @@
 """Generation orchestrator: RAG retrieve → assemble prompt → Claude → validate → store."""
 from __future__ import annotations
 from typing import Any
-from ..db.supabase_client import supabase
-from ..integrations.claude_client import generate_json
-from ..integrations.perplexity_client import research
-from ..prompts.generation_prompt import load_system_prompt, build_retrieved_block, build_user_request
+from db.supabase_client import supabase
+from integrations.claude_client import generate_json
+from integrations.perplexity_client import research
+from prompts.generation_prompt import load_system_prompt, build_retrieved_block, build_user_request
 from . import brand_context, retrieval, duplicate_check, compliance, synthesis
 
 

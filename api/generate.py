@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..core import generator
+from core import generator
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/generate", tags=["generate"])

@@ -4,7 +4,7 @@ Outbound: schedule social posts and DM workflows.
 Inbound: handle webhook from GHL when a follower DMs a keyword (handled in api/webhooks.py).
 """
 import httpx
-from ..config import get_settings
+from config import get_settings
 
 
 BASE = "https://services.leadconnectorhq.com"

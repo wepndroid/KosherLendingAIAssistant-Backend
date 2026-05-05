@@ -3,8 +3,8 @@ import hmac
 import hashlib
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from ..config import get_settings
-from ..db.supabase_client import supabase
+from config import get_settings
+from db.supabase_client import supabase
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 

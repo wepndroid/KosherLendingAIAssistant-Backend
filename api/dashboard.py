@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from collections import Counter
 
-from ..db.supabase_client import supabase
+from db.supabase_client import supabase
 from .auth import optional_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])

@@ -7,7 +7,7 @@ prefer next.
 """
 from __future__ import annotations
 from itertools import combinations
-from ..db.supabase_client import supabase
+from db.supabase_client import supabase
 
 
 def library_log(limit: int = 100) -> list[dict]:
