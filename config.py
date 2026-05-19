@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     BRAND_COMPLIANCE: str = "Jeffrey Ben-Davis | NMLS #320841 | KosherLending.com | Equal Housing Lender"
     EXCLUDED_STATES: str = "NY"
 
+    # When false, /api/generate returns the generated package to the UI
+    # without writing to Supabase (generated_content, usage_log, activity_log).
+    # Useful when the database is read-only / over quota.
+    PERSIST_GENERATED_CONTENT: bool = True
+
     @property
     def origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

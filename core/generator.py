@@ -1,6 +1,7 @@
 """Generation orchestrator: RAG retrieve → assemble prompt → Claude → validate → store."""
 from __future__ import annotations
 from typing import Any
+from config import get_settings
 from db.supabase_client import supabase
 from integrations.claude_client import generate_json
 from integrations.perplexity_client import research
@@ -229,7 +230,19 @@ async def generate_one(
             },
         }
 
+    if not get_settings().PERSIST_GENERATED_CONTENT:
+        # Bypass mode: return the in-memory package without touching Supabase.
+        # Used when the DB is read-only / over quota so the UI can still preview output.
+        ephemeral = dict(generated)
+        ephemeral.pop("angle_embedding", None)  # large vector, never useful to the client
+        ephemeral["id"] = None
+        ephemeral["persisted"] = False
+        ephemeral["spoken_cta"] = generated.get("spoken_cta") or ephemeral.get("cta")
+        ephemeral["cta_strategy"] = (generated.get("validations") or {}).get("cta_strategy")
+        return ephemeral
+
     saved = _persist(generated)
+    saved["persisted"] = True
     saved["spoken_cta"] = generated.get("spoken_cta") or saved.get("cta")
     saved["cta_strategy"] = (generated.get("validations") or {}).get("cta_strategy")
     duplicate_check.log(content_id=saved["id"], content=saved)
